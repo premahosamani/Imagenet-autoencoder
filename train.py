@@ -16,17 +16,17 @@ def get_args():
     # parse the args
     print('=> parse the args ...')
     parser = argparse.ArgumentParser(description='Trainer for auto encoder')
-    parser.add_argument('--arch', default='vgg16', type=str, 
+    parser.add_argument('--arch', default='vgg11', type=str, 
                         help='backbone architechture')
     parser.add_argument('--train_list', type=str)
-    parser.add_argument('-j', '--workers', default=16, type=int, metavar='N', 
+    parser.add_argument('-j', '--workers', default=8, type=int, metavar='N', 
                         help='number of data loading workers (default: 0)')
     parser.add_argument('--epochs', default=20, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
-    parser.add_argument('-b', '--batch-size', default=256, type=int, metavar='N',
-                        help='mini-batch size (default: 256), this is the total '
+    parser.add_argument('-b', '--batch-size', default=4, type=int, metavar='N',
+                        help='mini-batch size (default: 16), this is the total '
                         'batch size of all GPUs on the current node when '
                         'using Data Parallel or Distributed Data Parallel')
 
@@ -45,7 +45,7 @@ def get_args():
                         help='The folder to save pths')
     parser.add_argument('--pth-save-epoch', default=1, type=int,
                         help='The epoch to save pth')
-    parser.add_argument('--parallel', type=int, default=1, 
+    parser.add_argument('--parallel', type=int, default=0, 
                         help='1 for parallel, 0 for non-parallel')
     parser.add_argument('--dist-url', default='tcp://localhost:10001', type=str,
                     help='url used to set up distributed training')                                            
@@ -56,36 +56,28 @@ def get_args():
 
 def main(args):
     print('=> torch version : {}'.format(torch.__version__))
-    ngpus_per_node = torch.cuda.device_count()
-    print('=> ngpus : {}'.format(ngpus_per_node))
+    print('=> using single GPU training')
 
-    if args.parallel == 1: 
-        # single machine multi card       
-        args.gpus = ngpus_per_node
-        args.nodes = 1
+    args.gpus = 1
+    args.world_size = 1
+
+
+    if not hasattr(args, "nr"):
         args.nr = 0
-        args.world_size = args.gpus * args.nodes
+    if not hasattr(args, "gpu"):
+        args.gpu = 0
 
-        args.workers = int(args.workers / args.world_size)
-        args.batch_size = int(args.batch_size / args.world_size)
-        mp.spawn(main_worker, nprocs=args.gpus, args=(args,))
-    else:
-        args.world_size = 1
-        main_worker(ngpus_per_node, args)
+    main_worker(0, args)
     
 def main_worker(gpu, args):
     utils.init_seeds(1 + gpu, cuda_deterministic=False)
-    if args.parallel == 1:
-        args.gpu = gpu
-        args.rank = args.nr * args.gpus + args.gpu
 
-        torch.cuda.set_device(gpu)
-        torch.distributed.init_process_group(backend='nccl', init_method=args.dist_url, world_size=args.world_size, rank=args.rank)  
-           
-    else:
-        # two dummy variable, not real
-        args.rank = 0
-        args.gpus = 1 
+    # single GPU setup
+    args.gpu = 0
+    args.rank = 0
+    args.gpus = 1
+    torch.cuda.set_device(args.gpu)
+
     if args.rank == 0:
         print('=> modeling the network {} ...'.format(args.arch))
     model = builder.BuildAutoEncoder(args) 
@@ -103,7 +95,7 @@ def main_worker(gpu, args):
             weight_decay=args.weight_decay)    
     if args.rank == 0:
         print('=> building the dataloader ...')
-    train_loader = dataloader.train_loader(args)
+        train_loader = dataloader.train_loader(args)
 
     if args.rank == 0:
         print('=> building the criterion ...')
@@ -117,6 +109,8 @@ def main_worker(gpu, args):
         print('=> starting training engine ...')
     for epoch in range(args.start_epoch, args.epochs):
         
+        torch.cuda.empty_cache()
+
         global current_lr
         current_lr = utils.adjust_learning_rate_cosine(optimizer, epoch, args)
 
