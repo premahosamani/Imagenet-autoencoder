@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+<<<<<<< HEAD
 import random
 <<<<<<< HEAD
 import tifffile
@@ -12,6 +13,15 @@ from torchvision.transforms import transforms
 import numpy as np
 import tifffile
 from PIL import Image
+=======
+
+import os
+import torch
+import torch.utils.data as data
+import rasterio
+import numpy as np
+
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
 
 import torch
 import torch.utils.data as data
@@ -24,26 +34,29 @@ import torch.nn.functional as F
 class ImageDataset(data.Dataset):
     def __init__(self, ann_file):
         self.ann_file = ann_file
-        self.transform = transform
         self.init()
 
     def init(self):
         self.im_names = []
         self.targets = []
+<<<<<<< HEAD
         self._load_annotations()
 
     def _load_annotations(self):
+=======
+
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
         with open(self.ann_file, 'r') as f:
             lines = f.readlines()
             for line in lines:
-                data = line.strip().split(' ')
-                self.im_names.append(data[0])
-                self.targets.append(int(data[1]))
+                path, label = line.strip().split(' ')
+                self.im_names.append(path)
+                self.targets.append(int(label))
 
     def __getitem__(self, index):
         im_name = self.im_names[index]
-        target = self.targets[index]
 
+<<<<<<< HEAD
         # read the .tif image
         img_array = tifffile.imread(im_name)
 
@@ -62,10 +75,28 @@ class ImageDataset(data.Dataset):
                 path, label = line.strip().split()
                 self.im_names.append(path)
                 self.targets.append(int(label))
+=======
+        # Read 5-channel TIFF
+        with rasterio.open(im_name) as src:
+            img = src.read()              # shape: (5, H, W)
+
+        img = img.astype(np.float32)
+
+        # Simple normalization (safe for multispectral)
+        max_val = img.max()
+        if max_val > 0:
+            img = img / max_val
+
+        img = torch.from_numpy(img)       # (5, H, W)
+
+        # Autoencoder: input == target
+        return img, img
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
 
     def __len__(self):
         return len(self.im_names)
 
+<<<<<<< HEAD
     def _normalize(self, x):
         return (x - x.min()) / (x.max() - x.min() + 1e-8)
 
@@ -123,6 +154,12 @@ def train_loader(args):
 
     train_dataset = ImageDataset(args.train_list)
 
+=======
+
+def train_loader(args):
+    train_dataset = ImageDataset(args.train_list)
+
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
     if args.parallel == 1:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             train_dataset,
@@ -135,12 +172,22 @@ def train_loader(args):
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
+<<<<<<< HEAD
         shuffle=(train_sampler is None),
         batch_size=args.batch_size,
         num_workers=args.workers,
         pin_memory=True,
         sampler=train_sampler,
         drop_last=(train_sampler is None)
+=======
+        batch_size=args.batch_size,
+        shuffle=(train_sampler is None),
+        num_workers=args.workers,
+        pin_memory=True,
+        sampler=train_sampler,
+        drop_last=True
+    )
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
 
     loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -152,6 +199,7 @@ def train_loader(args):
         drop_last=True
     )
 
+<<<<<<< HEAD
     return loader
 
 
@@ -170,12 +218,23 @@ def val_loader(args):
         val_dataset,
         shuffle=False,
         batch_size=args.batch_size,
+=======
+
+def val_loader(args):
+    val_dataset = ImageDataset(args.val_list)
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
         num_workers=args.workers,
         pin_memory=True
     )
 
     return val_loader
 
+<<<<<<< HEAD
 class GaussianBlur(object):
     """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
 
@@ -199,3 +258,5 @@ class GaussianBlur(object):
     )
 
     return loader
+=======
+>>>>>>> 5c35678 (Add dataloader.py for data loading functionality)
